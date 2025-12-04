@@ -2,7 +2,7 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { OrbitControls, Stars, Sparkles, PerspectiveCamera } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, Noise } from '@react-three/postprocessing';
-import { Group, Shape, Vector3 } from 'three';
+import { Group, Shape, Vector3, InstancedMesh, Object3D } from 'three';
 import { ParticleSystem } from './ParticleSystem';
 import { AppState } from '../types';
 import { CONFIG } from '../constants';
@@ -12,6 +12,72 @@ interface SceneProps {
   treeColor: string;
   ornamentColorA: string;
   ornamentColorB: string;
+}
+
+const Snow = () => {
+    const meshRef = useRef<InstancedMesh>(null);
+    const count = 1500;
+    const dummy = useMemo(() => new Object3D(), []);
+    
+    const particles = useMemo(() => {
+        const temp = [];
+        for(let i=0; i<count; i++) {
+            const x = (Math.random() - 0.5) * 50;
+            const y = Math.random() * 40 - 10;
+            const z = (Math.random() - 0.5) * 50;
+            const speed = 0.5 + Math.random() * 1.5;
+            const factor = 0.2 + Math.random() * 0.8;
+            temp.push({ x, y, z, speed, factor });
+        }
+        return temp;
+    }, []);
+
+    useFrame((state, delta) => {
+        if (!meshRef.current) return;
+        particles.forEach((p, i) => {
+            // Fall down
+            p.y -= p.speed * delta;
+            
+            // Reset if below ground
+            if (p.y < -15) {
+                p.y = 25;
+                p.x = (Math.random() - 0.5) * 50;
+                p.z = (Math.random() - 0.5) * 50;
+            }
+            
+            // Drift with sine wave
+            dummy.position.set(
+                p.x + Math.sin(state.clock.elapsedTime * p.factor + i) * 0.5,
+                p.y,
+                p.z + Math.cos(state.clock.elapsedTime * p.factor + i) * 0.5
+            );
+            
+            // Gentle rotation
+            dummy.rotation.set(
+                state.clock.elapsedTime * 0.2 + i,
+                state.clock.elapsedTime * 0.1 + i,
+                state.clock.elapsedTime * 0.2 + i
+            );
+            
+            dummy.scale.setScalar(p.factor * 0.15); // Randomize size
+            dummy.updateMatrix();
+            meshRef.current!.setMatrixAt(i, dummy.matrix);
+        });
+        meshRef.current.instanceMatrix.needsUpdate = true;
+    });
+
+    return (
+        <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
+            <dodecahedronGeometry args={[1, 0]} /> 
+            <meshStandardMaterial 
+                color="#ffffff" 
+                emissive="#e0f7fa"
+                emissiveIntensity={0.5}
+                roughness={0.1}
+                metalness={0.8}
+            />
+        </instancedMesh>
+    )
 }
 
 const StarTopper = () => {
@@ -189,6 +255,9 @@ export const Scene: React.FC<SceneProps> = ({ mode, treeColor, ornamentColorA, o
             <Gifts />
         </group>
       </group>
+
+      {/* Environmental Snow */}
+      <Snow />
 
       {/* Environment Atmospherics */}
       <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
